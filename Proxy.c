@@ -6,27 +6,11 @@
 #include <netinet/in.h>
 #include <stdlib.h>
 #include <string.h>
+#include <netdb.h>  /*DNS?*/
 
 void error(char *msg) {
     perror(msg);
     exit(1);
-}
-
-char *giveLengthToHeader(char *str1, int length) {
-
-    char *new_str;
-    char str2[20];
-    sprintf(str2, "%d", length);
-    if ((new_str = malloc(strlen(str1) + strlen(str2) + 1)) != NULL) {
-        new_str[0] = '\0';   // ensures the memory is an empty string
-        strcat(new_str, str1);
-        strcat(new_str, " ");
-        strcat(new_str, str2);
-        strcat(new_str, "\n\n");
-    }
-    return new_str;
-    /*This is for actual parsing algorythm to make everything more generic and dynamic
-     * as of right now didnt saw any requirements to do this in project 1.*/
 }
 
 int main(int argc, char *argv[]) {
@@ -86,15 +70,57 @@ int main(int argc, char *argv[]) {
 
         char* token;
         char* string;
-
+        char *host;
+        char temp2[50];
         string = strdup(requestFromClient);
 
-
+        /*Getting the requested address*/
         string = strstr(string, "/?q=");
         if (string != NULL){
             token = strsep(&string, "=");
             token = strsep(&string, " ");
-            printf("%s\n", token);
+            host = token;
+
+            //get rid of www
+            if(strstr(token, "www.") != NULL) {
+                strcpy (temp2, token);
+                strtok(temp2, ".");
+                host = strtok(NULL, " ");
+            }
+
+            printf("Connecting to %s\n", host);
+
+            //turn host name into ip address
+            struct hostent *he;
+            if ((he = gethostbyname(host)) == NULL) {
+                fprintf(stderr, "Could not get host\n");
+                continue;
+            } else {
+                printf("Connecting to %s\n", he);
+            }
+
+            //create a socket on the proxy server
+            int newSocket = socket(AF_INET, SOCK_STREAM, 0);
+            if (newSocket < 0) {
+                perror("socket() failed");
+                exit(0);
+            }
+
+            struct sockaddr_in addr_req;
+            memset(&addr_req, 0, sizeof (addr_req));
+            memcpy(&addr_req.sin_addr, he->h_addr_list[0], he->h_length);
+            addr_req.sin_family = AF_INET;
+            addr_req.sin_port = htons(80); //connect to port 80
+
+
+            //attempt connection with assigned socket
+            if (connect(newSocket, (struct sockaddr *)&addr_req, sizeof(addr_req)) < 0) {
+                fprintf(stderr, "Could not connect to server\n");
+                exit(0);
+            } else {
+                printf("Connected to host!\n");
+            }
+
         } else {
             printf("Nothing to forward\n");
         }
