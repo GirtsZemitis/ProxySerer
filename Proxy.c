@@ -97,6 +97,7 @@ int main(int argc, char *argv[]) {
                 continue;
             } else {
                 printf("Connecting to %s\n", he);
+                printf("Token %s\n", token);
             }
 
             //create a socket on the proxy server
@@ -121,46 +122,77 @@ int main(int argc, char *argv[]) {
                 printf("Connected to host!\n");
             }
 
+            //generate request based on passed address
+            char *request = (char *)malloc(strlen(token)+23);
+            sprintf(request, "GET %s HTTP/1.0\n\n", token);
+
+            //send request to socket
+            if (send(newSocket, request, strlen(request), 0) < 0) {
+                fprintf(stderr, "[-] Failed to send message\n");
+                close(newSocket);
+                exit(0);
+            }
+
+            //handle response from the server
+            char server_r[10000];
+            if (recv(newSocket, server_r, 10000, 0) < 0) {
+                fprintf(stderr, "[-] Failed to receive message\n");
+                close(newSocket);
+                exit(0);
+            }
+            printf("Received From Server: %s\n", server_r);
+
+
+            /*Sending actual file here*/
+            printf("Sending File\n");
+            if (write(clientsockfd, server_r, strlen(server_r)) < 0) {
+                fprintf(stderr, "ERROR writing to socket\n");
+                exit(0);
+            }
+
+
         } else {
             printf("Nothing to forward\n");
-        }
 
-        char *response_200_html =
-                "HTTP/1.1 200 OK\n"
-                        "Content-Type: text/html\n"
-                        "Content-Length: 1000\n"
-                        "\n";
+            char *response_200_html =
+                    "HTTP/1.1 200 OK\n"
+                            "Content-Type: text/html\n"
+                            "Content-Length: 1000\n"
+                            "\n";
 
-        FILE *fp;
-        fp = fopen("index.html", "rb");
-        int headerSent = 1;
+            FILE *fp;
+            fp = fopen("index.html", "rb");
+            int headerSent = 1;
 
-        while (1) {
+            while (1) {
 
-            unsigned char fileForClient[256] = {0};
-            int readFile = fread(fileForClient, 1, 256, fp);
-            /* Header flag */
+                unsigned char fileForClient[256] = {0};
+                int readFile = fread(fileForClient, 1, 256, fp);
+                /* Header flag */
 
 
-            if (readFile > 0) {
-                if (headerSent == 1) {
-                    headerSent = 0;
-                    printf("Sending Header\n");
-                    send(clientsockfd, response_200_html, strlen(response_200_html), 0);
+                if (readFile > 0) {
+                    if (headerSent == 1) {
+                        headerSent = 0;
+                        printf("Sending Header\n");
+                        send(clientsockfd, response_200_html, strlen(response_200_html), 0);
+                    }
+                    /*Sending actual file here*/
+                    printf("Sending File\n");
+                    write(clientsockfd, fileForClient, readFile);
                 }
-                /*Sending actual file here*/
-                printf("Sending File\n");
-                write(clientsockfd, fileForClient, readFile);
-            }
 
-            if (readFile < 256) {
-                if (feof(fp))
-                    printf("End of file\n");
-                if (ferror(fp))
-                    printf("Error reading\n");
-                break;
+                if (readFile < 256) {
+                    if (feof(fp))
+                        printf("End of file\n");
+                    if (ferror(fp))
+                        printf("Error reading\n");
+                    break;
+                }
             }
         }
+
+
 
 
         close(clientsockfd);
